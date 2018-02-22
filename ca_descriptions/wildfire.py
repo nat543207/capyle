@@ -15,72 +15,77 @@ sys.path.append(main_dir_loc + 'capyle/guicomponents')
 from capyle.ca import Grid2D, Neighbourhood, randomise2d
 import capyle.utils as utils
 import numpy as np
+import enum
+from collections import namedtuple
+from random import random as rand
 
-# Apparently enums don't work with how this program unpickles things.  Sadness.
-# So I'll just use constants instead
-#from enum import Enum
-#class Terrain(Enum):
-WATER = 0
-SCORCHED = 1
-SCRUBLAND = 2
-CHAPARRAL = 3
-FOREST = 4
-BURNING = 5 # Can't be initial state
+Terrain = namedtuple('Terrain', ['index', 'burning', 'burn_prob', 'fuel'])
+class TerrainType(enum.Enum):
+    BURNING = Terrain(0, True, 0, -1)
+    WATER = Terrain(1, False, 0, 0)
+    SCORCHED = Terrain(2, False, 0, 0)
+    SCRUBLAND = Terrain(3, False, .7, 1)
+    CHAPARRAL = Terrain(4, False, .5, 2)
+    FOREST = Terrain(5, False, .2, 3)
+tiles = [v.value.index for v in TerrainType.__members__.values()]
 
-initial = {
-    WATER : (False, 0, 0),
-    #SCORCHED : (False, 0, 0),
-    SCRUBLAND : (False, 1, 1),
-    CHAPARRAL : (False, 1, 2),
-    FOREST : (False, 1, 3)
-}
+# State used for calculation
+state = None
 
-vals = None
 wind = None
 
-counter = 0
 
-def transition(grid, neighbourstates, neighbourcounts, terraininfo, winddir):
+def transition_function(grid, neighbourstates, neighbourcounts):
     """
     Function to apply the transition rules
-    This *not* named transition_function because our code takes advantage of
-    the behavior that is automatically invoked by the engine when the
-    transition_function property of a module is a tuple
     """
+    global state
+    global view
+    global burning
+    global burn_prob
+    global fuel
 
-    global vals
-    if vals is None:
-        vals = np.empty(grid.shape,
-            dtype=[('burning', np.bool_),('burn_prob', np.float_),
-                ('fuel', np.int_)])
-        tmp = np.vectorize(lambda state: initial[state])(grid)
-        vals[:,:]['burning'] = tmp[0]
-        vals[:,:]['burn_prob'] = tmp[1]
-        vals[:,:]['fuel'] = tmp[2]
+    if state is None:
+        state = np.stack(axis=-1, arrays=np.vectorize(
+                lambda state: list(TerrainType)[int(state)].value)(grid))
 
-    global counter
-    vals[counter,counter]['burning'] = True
-    counter += 1
+    view = state[:,:,0]
+    burning = state[:,:,1].astype(bool) # This is a copy, so insertion semantics don't work correctly on it
+    burn_prob = state[:,:,2]
+    fuel = state[:,:,3]
 
-    grid[vals[:,:]['burning']] = BURNING
+    ## Fire consumes fuel
+    fuel[burning] -= 1
 
-    return grid
+    ## Any cell that was burning at the beginning of the transition has the
+    ## chance to ignite its neighbours
+    ignite = (0 < neighbourcounts[TerrainType.BURNING.value.index]) & (rand() < burn_prob)
 
-transition_function = (transition, vals, wind)
+    # Any burning cells that have run out of fuel become 'scorched'
+    scorched = burning & (fuel == 0)
+
+    # Populate the view based on cell states and return
+    burning = (burning | ignite) & ~scorched
+    state[:,:,1][burning] = True
+    state[scorched] = TerrainType.SCORCHED.value
+    view[burning] = TerrainType.BURNING.value.index
+    return view
+
 
 def setup(args):
     """Set up the config object used to interact with the GUI"""
+    global states
     config_path = args[0]
     config = utils.load(config_path)
     # -- THE CA MUST BE RELOADED IN THE GUI IF ANY OF THE BELOW ARE CHANGED --
     config.title = "Wildfire"
     config.dimensions = 2
-    config.states = (WATER, SCORCHED, BURNING, SCRUBLAND, CHAPARRAL, FOREST)
+    config.states = tiles
     # -------------------------------------------------------------------------
 
     # ---- Override the defaults below (these may be changed at anytime) ----
 
-    config.state_colors = [(0,0,1),(0,0,0),(.5,.7,0),(.2,.5,0),(0,.2,0),(1,0,0)]
+    config.state_colors = [(1,0,0),(0,0,1),(0,0,0),(.5,.7,0),(.2,.5,0),(0,.2,0)]
     # config.grid_dims = (200,200)
 
     # ----------------------------------------------------------------------
@@ -109,6 +114,7 @@ def main():
     config.save()
     # Save timeline to file
     utils.save(timeline, config.timeline_path)
+
 
 if __name__ == "__main__":
     main()
