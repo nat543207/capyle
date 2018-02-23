@@ -19,76 +19,61 @@ import enum
 from collections import namedtuple
 from random import random as rand
 
-Terrain = namedtuple('Terrain', ['index', 'burning', 'burn_prob', 'fuel'])
-class TerrainType(enum.Enum):
-    BURNING = Terrain(0, True, 0, -1)
-    WATER = Terrain(1, False, 0, 0)
-    SCORCHED = Terrain(2, False, 0, 0)
-    SCRUBLAND = Terrain(3, False, .7, 1)
-    CHAPARRAL = Terrain(4, False, .5, 2)
-    FOREST = Terrain(5, False, .2, 3)
-tiles = [v.value.index for v in TerrainType.__members__.values()]
 
-# State used for calculation
-state = None
+class Terrain(enum.IntEnum):
+    BURNING = 0
+    WATER = 1
+    SCORCHED = 2
+    SCRUBLAND = 3
+    CHAPARRAL = 4
+    FOREST = 5
 
 wind = None
 
 
-def transition_function(grid, neighbourstates, neighbourcounts):
+def transition_function(grid, neighbourstates, neighbourcounts, burning, fuel, ign_prob):
     """
     Function to apply the transition rules
+    N. B. `grid` is a reference to a region of data in the caller; you MUST
+    return `grid` or things will begin to break in unexpected ways
     """
-    global state
-    global view
-    global burning
-    global burn_prob
-    global fuel
 
-    if state is None:
-        state = np.stack(axis=-1, arrays=np.vectorize(
-                lambda state: list(TerrainType)[int(state)].value)(grid))
-
-    view = state[:,:,0]
-    burning = state[:,:,1].astype(bool) # This is a copy, so insertion semantics don't work correctly on it
-    burn_prob = state[:,:,2]
-    fuel = state[:,:,3]
-
-    ## Fire consumes fuel
+    # Fire consumes fuel
     fuel[burning] -= 1
 
-    ## Any cell that was burning at the beginning of the transition has the
-    ## chance to ignite its neighbours
-    ignite = (0 < neighbourcounts[TerrainType.BURNING.value.index]) & (rand() < burn_prob)
+    # Determine how the fire has changed
+    ignited = (rand() < ign_prob) & ignition_possible(neighbourstates, neighbourcounts)
+    scorched = burning & (fuel == 0)
+    burning[ignited] = True
 
     # Any burning cells that have run out of fuel become 'scorched'
-    scorched = burning & (fuel == 0)
+    burning[scorched] = False
+    ign_prob[scorched] = 0
 
     # Populate the view based on cell states and return
-    burning = (burning | ignite) & ~scorched
-    state[:,:,1][burning] = True
-    state[scorched] = TerrainType.SCORCHED.value
-    view[burning] = TerrainType.BURNING.value.index
-    return view
+    grid[burning] = Terrain.BURNING
+    grid[scorched] = Terrain.SCORCHED
+    return grid
+
+
+def ignition_possible(neighbourstates, neighbourcounts):
+    return (0 < neighbourcounts[int(Terrain.BURNING)])
 
 
 def setup(args):
     """Set up the config object used to interact with the GUI"""
-    global states
     config_path = args[0]
     config = utils.load(config_path)
-    # -- THE CA MUST BE RELOADED IN THE GUI IF ANY OF THE BELOW ARE CHANGED --
-    config.title = "Wildfire"
-    config.dimensions = 2
-    config.states = tiles
-    # -------------------------------------------------------------------------
 
-    # ---- Override the defaults below (these may be changed at anytime) ----
-
+    # For some reason calling list(Terrain) breaks everything
+    config.states = [v.value for v in Terrain.__members__.values()]
     config.state_colors = [(1,0,0),(0,0,1),(0,0,0),(.5,.7,0),(.2,.5,0),(0,.2,0)]
-    # config.grid_dims = (200,200)
+    config.title = "Wildfire"
+    config.wrap = False
+    config.dimensions = 2
 
-    # ----------------------------------------------------------------------
+    #config.grid_dims = (20,20)
+
 
     # the GUI calls this to pass the user defined config
     # into the main system with an extra argument
@@ -105,7 +90,13 @@ def main():
     config = setup(sys.argv[1:])
 
     # Create grid object using parameters from config + transition function
-    grid = Grid2D(config, transition_function)
+    data = config.initial_grid.astype(int)
+    grid = Grid2D(config,
+        (transition_function,
+        data == 0, #TODO Enumify
+        np.array([-1, 0, 0, 1, 2, 3])[data]
+        np.array([0, 0, 0, 1, .7, .4])[data],
+        ))
 
     # Run the CA, save grid state every generation to timeline
     timeline = grid.run()
