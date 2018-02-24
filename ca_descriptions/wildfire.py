@@ -16,8 +16,6 @@ from capyle.ca import Grid2D, Neighbourhood, randomise2d
 import capyle.utils as utils
 import numpy as np
 import enum
-from collections import namedtuple
-from random import random as rand
 
 
 class Terrain(enum.IntEnum):
@@ -35,14 +33,15 @@ def transition_function(grid, neighbourstates, neighbourcounts, burning, fuel, i
     """
     Function to apply the transition rules
     N. B. `grid` is a reference to a region of data in the caller; you MUST
-    return `grid` or things will begin to break in unexpected ways
+    modify and return `grid` or things will begin to break in unexpected ways
     """
 
     # Fire consumes fuel
     fuel[burning] -= 1
 
     # Determine how the fire has changed
-    ignited = (rand() < ign_prob) & ignition_possible(neighbourstates, neighbourcounts)
+    ignited = ((np.random.random(grid.shape) < ign_prob)
+        & ignition_possible(neighbourstates, neighbourcounts))
     scorched = burning & (fuel == 0)
     burning[ignited] = True
 
@@ -64,15 +63,24 @@ def setup(args):
     """Set up the config object used to interact with the GUI"""
     config_path = args[0]
     config = utils.load(config_path)
+    if config.initial_grid is None:
+        # Row numbers are negative to index from end of array instead of start
+        # so that numbers in source are consistent with the grid numbering
+        # given in the spec doc
+        config.initial_grid = np.array([[Terrain.CHAPARRAL]*50]*50)
+        config.initial_grid[-19: -9,15:24] = Terrain.FOREST
+        config.initial_grid[-39:-35, 5:14] = Terrain.WATER
+        config.initial_grid[-44:-15,32:34] = Terrain.SCRUBLAND
+
 
     # For some reason calling list(Terrain) breaks everything
     config.states = [v.value for v in Terrain.__members__.values()]
-    config.state_colors = [(1,0,0),(0,0,1),(0,0,0),(.5,.7,0),(.2,.5,0),(0,.2,0)]
+    config.state_colors = [(1,0,0),(0,0,1),(0,0,0),(.7,.8,0),(.3,.6,0),(0,.4,0)]
     config.title = "Wildfire"
     config.wrap = False
     config.dimensions = 2
 
-    #config.grid_dims = (20,20)
+    config.grid_dims = (50,50)
 
 
     # the GUI calls this to pass the user defined config
@@ -93,9 +101,9 @@ def main():
     data = config.initial_grid.astype(int)
     grid = Grid2D(config,
         (transition_function,
-        data == 0, #TODO Enumify
-        np.array([-1, 0, 0, 1, 2, 3])[data]
-        np.array([0, 0, 0, 1, .7, .4])[data],
+        data == Terrain.BURNING,
+        np.array([-1, 0, 0, 1, 2, 3])[data],
+        np.array([0, 0, 0, 1, .7, .3])[data],
         ))
 
     # Run the CA, save grid state every generation to timeline
