@@ -26,7 +26,10 @@ class Terrain(enum.IntEnum):
     CHAPARRAL = 4
     FOREST = 5
 
-wind = None
+# Strength of wind from [nw, n, ne, w, e, sw, s, se]
+# No wind = [.8]*8
+wind = np.array([.3,.3,.3,.5,.5,.9,.9,.9])
+wind = wind.reshape((8,1,1))
 
 
 def transition_function(grid, neighbourstates, neighbourcounts, burning, fuel, ign_prob):
@@ -39,9 +42,15 @@ def transition_function(grid, neighbourstates, neighbourcounts, burning, fuel, i
     # Fire consumes fuel
     fuel[burning] -= 1
 
+    def on_fire(states):
+        return states == 0
+
+    # Calculate temporary ignition probablities
+    ign_updated = (on_fire(neighbourstates)*wind*ign_prob).max(0)
+
     # Determine how the fire has changed
-    ignited = ((np.random.random(grid.shape) < ign_prob)
-        & ignition_possible(neighbourstates, neighbourcounts))
+    ignited = ((np.random.random(grid.shape) < ign_updated)
+        & (0 < neighbourcounts[int(Terrain.BURNING)]))
     scorched = burning & (fuel == 0)
     burning[ignited] = True
 
@@ -53,10 +62,6 @@ def transition_function(grid, neighbourstates, neighbourcounts, burning, fuel, i
     grid[burning] = Terrain.BURNING
     grid[scorched] = Terrain.SCORCHED
     return grid
-
-
-def ignition_possible(neighbourstates, neighbourcounts):
-    return (0 < neighbourcounts[int(Terrain.BURNING)])
 
 
 def setup(args):
@@ -102,8 +107,8 @@ def main():
     grid = Grid2D(config,
         (transition_function,
         data == Terrain.BURNING,
-        np.array([-1, 0, 0, 1, 2, 3])[data],
-        np.array([0, 0, 0, 1, .7, .3])[data],
+        np.array([0, 0, 0, 8, 96, 720])[data], # Fuel
+        np.array([0, 0, 0, .9, .05, .05])[data] # Ignition probability
         ))
 
     # Run the CA, save grid state every generation to timeline
