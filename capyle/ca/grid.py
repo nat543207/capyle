@@ -64,7 +64,8 @@ class Grid(object):
         # Progress window
         # pass in the run function and timeline to the progress bar
         # progress bar executes these
-        gui = _ProgressWindow(num_generations, self._runca, timeline)
+        #gui = _ProgressWindow(num_generations, self._runca, timeline)
+        self._runca(num_generations, None, timeline)
         return timeline
 
     def _runca(self, num_generations, progressbar, timeline):
@@ -81,8 +82,8 @@ class Grid(object):
             self.step()
             timeline[i+1] = np.copy(self.grid)
             # update the progress bar every 10 generations
-            if (i+1) % 10 == 9:
-                progressbar.set(i+1)
+            #if (i+1) % 10 == 9:
+            #    progressbar.set(i+1)
 
 
 class _ProgressWindow(object):
