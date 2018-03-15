@@ -37,14 +37,6 @@ class Terrain(enum.IntEnum):
     CHAPARRAL = 4
     FOREST = 5
 
-# Strength of wind from [nw, n, ne, w, e, sw, s, se]
-# No wind = [.7]*8
-#wind = np.array([.9, 1,.9,
-#                 .5,   .5,
-#                 .3,.1,.3])
-#wind = np.array([.7]*8)
-#wind = wind.reshape((8,1,1))
-
 
 def transition_function(grid, neighbourstates, neighbourcounts, burning, fuel, ign_prob, wind):
     """
@@ -84,7 +76,7 @@ def setup(args):
         # so that numbers in source are consistent with the grid numbering
         # given in the spec doc
         config.initial_grid = np.array([[Terrain.CHAPARRAL]*50]*50)
-        config.initial_grid[-29: -9,15:24] = Terrain.FOREST
+        config.initial_grid[-19: -9,15:24] = Terrain.FOREST
         config.initial_grid[-39:-35, 5:14] = Terrain.WATER
         config.initial_grid[-44:-15,32:34] = Terrain.SCRUBLAND
 

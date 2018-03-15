@@ -1,8 +1,12 @@
+#! /usr/bin/env python3
 import argparse
 import numpy as np
 import pickle
 import sys
 from subprocess import call
+import pdb
+import signal
+signal.signal(signal.SIGUSR2, lambda _, __: pdb.set_trace())
 
 default_wind = np.array([.9, 1, .9,
                          .5,    .5,
@@ -82,58 +86,67 @@ def evolve_water(config_file, iterations, cross_prob=0.3, mut_prob=0.05, pop_siz
     config = pickle.load(open(config_file, 'rb'))
     config.path = '/home/nat543207/src/remote/capyle/temp/config.pkl'
     initial_map = config.initial_grid
-    population = np.random.randint(0, 50, (pop_size, 10, 2))
-    fitness = np.zeros((pop_size,))
+    #population = np.random.randint(0, 50, (pop_size, 10, 2))
+    #fitness = np.zeros((pop_size,))
 
-    for p in population:
-        replace_invalid(p)
+    #for p in population:
+    #    replace_invalid(p)
 
-    while True:
-        for i, genome in enumerate(population):
-            env = initial_map
-            for gene in genome:
-                env[gene[0], gene[1]] = 1 #WATER
-            config.initial_grid = env
-            config.save()
-            fitness[i] = simulate(config.path, 10, default_wind)[0]
+    #while True:
+    #    for i, genome in enumerate(population):
+    #        env = initial_map.copy()
+    #        for gene in genome:
+    #            env[gene[0], gene[1]] = 1 #WATER
+    #        config.initial_grid = env
+    #        config.save()
+    #        fitness[i] = simulate(config.path, 10, default_wind)[0]
 
-        num_selected = math.floor(math.sqrt(len(population)))
-        best = np.argsort(-fitness)[0:num_selected]
-        survivors = population[best]
+    #    num_selected = math.floor(math.sqrt(len(population)))
+    #    best = np.argsort(-fitness)[0:num_selected]
+    #    survivors = population[best]
 
-        print(survivors)
-        print(fitness[best])
-        print('###')
-        print()
-        sys.stdout.flush()
+    #    print(survivors)
+    #    print(fitness[best])
+    #    print('###')
+    #    print()
+    #    sys.stdout.flush()
 
-        population = np.ndarray((len(survivors)**2, 10, 2), dtype=int)
-        fitness = np.zeros((len(survivors)**2))
-        for i in range(len(survivors)):
-            for j in range(i, len(survivors)):
-                children = breed(survivors[i], survivors[j])
-                population[num_selected*i+j] = children[0]
-                population[num_selected*j+i] = children[1]
+    #    population = np.ndarray((len(survivors)**2, 10, 2), dtype=int)
+    #    fitness = np.zeros((len(survivors)**2))
+    #    for i in range(len(survivors)):
+    #        for j in range(i, len(survivors)):
+    #            children = breed(survivors[i], survivors[j])
+    #            population[num_selected*i+j] = children[0]
+    #            population[num_selected*j+i] = children[1]
 
-        for p in population:
-            mutate(p)
-
-
+    #    for p in population:
+    #        mutate(p)
 
 
+    genome = np.array([[i, 15] for i in range(21,31)])
+
+    env = initial_map.copy()
+    for gene in genome:
+        env[gene[0], gene[1]] = 1 #WATER
+    config.initial_grid = env
+    config.save()
+    print(genome)
+    print(simulate(config.path, 500, default_wind))
 
 
 def run():
-    parser = argparse.ArgumentParser(description='Calculate statistics on CA')
-    parser.add_argument('config_file', metavar='CONFIG_FILE', type=str,
-            help='Path to .pkl config file')
+    parser = argparse.ArgumentParser(description='Calculate statistics on a CAPyLE cellular automaton')
+    parser.add_argument('-f', '--config-file', metavar='CONFIG_FILE', type=str,
+            help='Path to .pkl config file', default='./temp/config.pkl')
     parser.add_argument('-n', '--num', metavar='N', dest='num_sims', type=int,
             help='Number of times to run simulation', default=10)
+    parser.add_argument('-w', '--wind', metavar='WIND_MODS', dest='wind', nargs=8,
+            help='Wind modifiers to use during simulaiton', default=default_wind)
     args = parser.parse_args()
 
-    #print(simulate(args.config_file, args.num_sims))
-    evolve_water(args.config_file, args.num_sims, cross_prob=0.4, mut_prob=0.1, pop_size=25)
-
+    res = simulate(args.config_file, args.num_sims, args.wind)
+    print(f'{res[0]/2} +/- {res[1]} hours to reach within 1km of town ({args.num_sims} simulations run)')
+    #evolve_water(args.config_file, args.num_sims, cross_prob=0.4, mut_prob=0.1, pop_size=25)
 
 
 if __name__ == '__main__':
